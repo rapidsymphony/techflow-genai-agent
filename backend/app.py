@@ -22,9 +22,10 @@ app.add_middleware(
 
 # Define the Input Format
 class ChatRequest(BaseModel):
-    message: str
+    message: str          # The current user message
+    messages: list = []   # <--- THIS WAS MISSING! (Stores the chat history)
     user_role: str = "L1_SUPPORT"
-    thread_id: str = "1"  # For conversation history
+    thread_id: str = "default"
 
 class LoginRequest(BaseModel):
     username: str
@@ -48,27 +49,37 @@ async def login(request: LoginRequest):
     else:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
+# In backend/app.py
+
+from langchain_core.messages import HumanMessage, AIMessage # <--- Add this import!
+
 @app.post("/api/chat")
 async def chat_endpoint(request: ChatRequest):
-    try:
-        # Run the LangGraph Agent
-        inputs = {
-            "messages": [("user", request.message)],
-            "user_role": request.user_role
-        }
-        config = {"configurable": {"thread_id": request.thread_id}}
-        
-        # Get the result
-        result = agent_app.invoke(inputs, config=config)
-        
-        # Extract the bot's last message
-        bot_response = result["messages"][-1].content
-        return {"reply": bot_response}
-    
-    except Exception as e:
-        print(f"Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    print(f"🧠 Receiving Message: {request.message}")
+    print(f"📜 Full History Length: {len(request.messages)}")
+    # 1. Convert React messages (dicts) to LangChain messages (Objects)
+    # This ensures the LLM understands the history perfectly.
+    converted_messages = []
+    for m in request.messages:
+        if m['role'] == 'user':
+            converted_messages.append(HumanMessage(content=m['content']))
+        elif m['role'] == 'ai':
+            converted_messages.append(AIMessage(content=m['content']))
 
+    # 2. Run the graph with the converted history
+    # We pass 'messages' and 'user_role' into the state
+    inputs = {
+        "messages": converted_messages,
+        "user_role": request.user_role
+    }
+    
+    result = agent_app.invoke(inputs)
+
+    # 3. Extract ONLY the string content from the last message
+    last_message = result["messages"][-1]
+    response_text = last_message.content  # <--- THIS IS THE FIX (Extracting text)
+
+    return {"response": response_text}
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -1,44 +1,46 @@
 # backend/graph.py
 import os
+from typing import TypedDict
 from langchain_ollama import ChatOllama
-from typing import Annotated, Literal, TypedDict
-from langchain_openai import ChatOpenAI
-from langchain_core.messages import HumanMessage, AIMessage
+# 1. Import SystemMessage here 👇
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage 
 from langgraph.graph import StateGraph, END
 
-# 1. Define the State (Memory)
 class AgentState(TypedDict):
     messages: list
-    user_role: str  # "L1_SUPPORT" or "MANAGER"
+    user_role: str
 
-# 2. Configurable LLM Switcher (Satisfies Senthil's req)
 def get_llm():
-    # In the future, you can swap this based on .env config
-    # e.g., if os.getenv("LLM_TYPE") == "IBM": return ChatWatsonx(...)
     return ChatOllama(model="llama3", temperature=0)
 
-# 3. The Core Node (The Agent)
 def chatbot_node(state: AgentState):
     llm = get_llm()
     user_role = state.get("user_role", "L1_SUPPORT")
     
-    # Simple Role-Based Logic logic
+    # 2. Stronger, simpler prompts to stop the "yapping"
     if user_role == "MANAGER":
-        system_prompt = "You are a Senior Support Manager Assistant. You can approve refunds."
+        prompt_text = (
+            "You are a Senior Support Manager. "
+            "You have authority to approve refunds and override policies. "
+            "Answer the user's question directly and concisely. Do not introduce yourself."
+        )
     else:
-        system_prompt = "You are an L1 Support Agent. You can only answer policy questions."
+        prompt_text = (
+            "You are an L1 Support Agent. "
+            "You can answer policy questions but CANNOT approve refunds. "
+            "Answer the question directly. Do not start every message with 'I am an L1 agent'."
+        )
     
-    # Combine history with system prompt
-    messages = [HumanMessage(content=system_prompt)] + state["messages"]
+    # 3. Use SystemMessage for the instruction 👇
+    # This tells Llama: "This is a rule, not a chat message."
+    messages = [SystemMessage(content=prompt_text)] + state["messages"]
+    
     response = llm.invoke(messages)
     return {"messages": [response]}
 
-# 4. Build the Graph
 workflow = StateGraph(AgentState)
 workflow.add_node("chatbot", chatbot_node)
 workflow.set_entry_point("chatbot")
 workflow.add_edge("chatbot", END)
 
-# user --> chatbot --> End
-# 5. Compile the App
 app = workflow.compile()
