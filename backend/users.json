@@ -1,0 +1,16 @@
+{
+  "users": [
+    {
+      "username": "senthil",
+      "password": "password123",
+      "role": "MANAGER",
+      "name": "Senthil (Manager)"
+    },
+    {
+      "username": "adi",
+      "password": "password123",
+      "role": "L1_SUPPORT",
+      "name": "Adi (Support)"
+    }
+  ]
+}
