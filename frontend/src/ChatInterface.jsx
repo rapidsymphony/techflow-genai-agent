@@ -45,7 +45,7 @@ const ChatInterface = ({ user }) => {
         { icon: <ShieldAlert className="w-6 h-6 text-orange-500" />, title: "Escalate Ticket", prompt: "I need to escalate this ticket to a manager." }
       ];
     }
-  };
+  };  
 
   const handleSend = async (text = input) => {
     if (!text.trim()) return;

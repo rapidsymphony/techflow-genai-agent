@@ -8,6 +8,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from graph import app as agent_app  # Import the graph we just made
+from database import get_db_connection
 
 app = FastAPI()
 
@@ -33,19 +34,25 @@ class LoginRequest(BaseModel):
 
 @app.post("/api/login")
 async def login(request: LoginRequest):
-    # 1. Load users from JSON file
-    try:
-        with open("users.json", "r") as f:
-            data = json.load(f)
-            users = data["users"]
-    except FileNotFoundError:
-        raise HTTPException(status_code=500, detail="User database not found.")
-
-    # 2. Find user
-    user = next((u for u in users if u["username"] == request.username and u["password"] == request.password), None)
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    
+    # SQL Query: Secure parameter binding (?) prevents SQL Injection
+    user = cursor.execute(
+        "SELECT * FROM users WHERE username = ? AND password = ?", 
+        (request.username, request.password)
+    ).fetchone()
+    
+    conn.close()
 
     if user:
-        return {"success": True, "role": user["role"], "name": user["name"]}
+        return {
+            "success": True, 
+            "role": user["role"], 
+            "name": user["name"],
+            # We return username as the thread_id for now
+            "thread_id": user["username"] 
+        }
     else:
         raise HTTPException(status_code=401, detail="Invalid credentials")
     
@@ -83,3 +90,6 @@ async def chat_endpoint(request: ChatRequest):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+# Manager end to end use case
+# L2 end to end use case
